@@ -122,7 +122,7 @@ appendFile(path_to_ino, codechunks[2]) # Add the finishing touches
 # The command is in a list so that it is easier to see
 compile_command = [
     "./arduino-resources/arduino-builder -compile -quiet -logger=machine -hardware ./arduino-resources/hardware -hardware ./arduino-resources/packages ",
-    "-tools ./arduino-resources/tools-builder -tools ./arduino-resources/hwtoolsavr -tools ./arduino-resources/packages -fqbn=digistump:avr:digispark-tiny ",
+    "-tools ./arduino-resources/tools-builder -tools ./arduino-resources/packages -fqbn=digistump:avr:digispark-tiny ",
     "-ide-version=10801 -build-path ", " -warnings=none -prefs=build.warn_data_percentage=75 ",
     "-prefs=runtime.tools.micronucleus.path=./arduino-resources/packages/digistump/tools/micronucleus/2.0a4 ",
     "-prefs=runtime.tools.avr-gcc.path=./arduino-resources/packages/arduino/tools/avr-gcc/4.8.1-arduino5 ./"
