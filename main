@@ -1,0 +1,140 @@
+#!/usr/bin/python3
+
+### atfw by merlin04
+### Generate Arduino sketches for your ATtiny-based keyboards
+
+
+import getopt, argparse, json, os, time
+
+### Define static variables
+codechunks = [
+    """#include "DigiKeyboard.h"
+void setup() {""",
+    """}
+void loop() {
+""",
+    """    DigiKeyboard.update();
+}"""
+]
+
+handlingCode = [
+    """    if(digitalRead(""",
+    """) == LOW) {
+        DigiKeyboard.sendKeyStroke(""",
+    """);
+        DigiKeyboard.delay(50);
+        while(digitalRead(""",
+    """) == LOW) {DigiKeyboard.update();}
+    }"""
+]
+
+sepchar = os.path.sep
+
+def appendFile(filepath, aTxt):
+    with open(filepath, "a") as myfile:
+        myfile.write(aTxt)
+
+def createFile(filepath):
+    open(filepath, 'a').close()
+
+### Argument time
+
+parser = argparse.ArgumentParser(description='Generate, compile, and upload firmware to ATtiny85-based input devices.')
+parser.add_argument('keymap', metavar='keymap', type=str,
+                    help='Pin name and corresponding keycode')
+parser.add_argument('-o', metavar='directory', type=str,
+                    help='Output directory name (defaults to \"generated\")')
+
+
+## Time to parse args
+args = parser.parse_args()
+
+# But first, we need to do a print statement
+# This has to be after parse_args so that the help statement will show and not this if no args are present
+
+print("Generating code...")
+
+time.sleep(0.25) # Give user time to read message
+
+# Keymap
+keymap = args.keymap
+json_acceptable_string = keymap.replace("'", "\"") # Alternative to eval (https://stackoverflow.com/questions/988228/convert-a-string-representation-of-a-dictionary-to-a-dictionary)
+keymap = json.loads(json_acceptable_string) # keymap is now a dict
+
+# Output file
+output_file = "generated_source.ino"
+output_dir = args.o
+if (output_dir == None): # Was the argument left blank?
+    directory_name_postfix = "" # Start with blank postfix
+    while(output_dir == None): # Convenient way to check once we've settled on a directory, since it will never be that once it's done
+        try:
+            os.makedirs("generated" + directory_name_postfix) # Try to make the directory
+            output_dir = "generated" + directory_name_postfix
+        except OSError as e: # "What about `directory`?" "I'm already `directory`"
+            pass # Ignore the error
+            if(directory_name_postfix == ""):
+                directory_name_postfix = str(2)
+            else:
+                directory_name_postfix = str(int(directory_name_postfix) + 1) # Convert the directory name prefix to a int so we can add 1 to it, then put it back in a string so we can combine it with "generated"
+
+### Need to put the ino into its own folder inside of the one we just made
+
+os.makedirs(output_dir + sepchar + "generated_source")
+
+### Put the beginning of the file into place
+
+path_to_ino = output_dir + sepchar + "generated_source" + sepchar + "generated_source.ino"
+
+createFile(path_to_ino)
+appendFile(path_to_ino, codechunks[0])
+for i in range(0,3): # For each possible pin-key assignment:
+    try: # Pretend like it exists, if it doesn't stop executing and go to next one
+        vartest = keymap[str(i)] # Doesn't do anything, but raises error if the entry doesn't exist
+        pinMode_statement = "    pinMode(" + str(i) + ", INPUT_PULLUP);" # Create the pinMode statement
+        appendFile(path_to_ino, "\n") # Make sure there's a line break first
+        appendFile(path_to_ino, pinMode_statement) # Add to file
+    except: # The entry in the dict didn't exist, so we're ignoring it
+        pass
+
+appendFile(path_to_ino, "\n")
+appendFile(path_to_ino, codechunks[1])
+
+## Now we have the pinMode statements, time to make the keypress handling code
+
+for i in range(0,3): # For each possible pin-key assignment:
+    try:
+        vartest = keymap[str(i)]
+        appendFile(path_to_ino, handlingCode[0])
+        appendFile(path_to_ino, str(i))
+        appendFile(path_to_ino, handlingCode[1])
+        appendFile(path_to_ino, keymap[str(i)])
+        appendFile(path_to_ino, handlingCode[2])
+        appendFile(path_to_ino, str(i))
+        appendFile(path_to_ino, handlingCode[3])
+        appendFile(path_to_ino, "\n")
+    except:
+        pass
+
+appendFile(path_to_ino, codechunks[2]) # Add the finishing touches
+
+### Now it's time to flash the board. It's a shell command so we'll use os.system
+
+# The command is in a list so that it is easier to see
+compile_command = [
+    "./arduino-resources/arduino-builder -compile -quiet -logger=machine -hardware ./arduino-resources/hardware -hardware ./arduino-resources/packages ",
+    "-tools ./arduino-resources/tools-builder -tools ./arduino-resources/hwtoolsavr -tools ./arduino-resources/packages -fqbn=digistump:avr:digispark-tiny ",
+    "-ide-version=10801 -build-path ", " -warnings=none -prefs=build.warn_data_percentage=75 ",
+    "-prefs=runtime.tools.micronucleus.path=./arduino-resources/packages/digistump/tools/micronucleus/2.0a4 ",
+    "-prefs=runtime.tools.avr-gcc.path=./arduino-resources/packages/arduino/tools/avr-gcc/4.8.1-arduino5 ./"
+]
+
+
+print("Code generated!\n")
+print("Compiling....") # Let the user know why there's about to be a jillion messages on their screen
+time.sleep(0.25) # Give the user a chance to read the message
+
+os.system(compile_command[0] + compile_command[1] + compile_command[2] + os.getcwd() + sepchar + output_dir + compile_command[3] + compile_command[4] + compile_command[5] + path_to_ino)
+
+print("Compiled!\n")
+time.sleep(0.25)
+os.system("./arduino-resources/packages/digistump/tools/micronucleus/2.0a4/launcher -cdigispark --timeout 60 -Uflash:w:" + os.getcwd() + sepchar + output_dir + sepchar + "generated_source.ino.hex" + ":i")
